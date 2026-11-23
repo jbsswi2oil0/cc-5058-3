@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>行为树演出运行时 · 三维舞台</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='7' fill='%234f8ef7'/></svg>" />
+  <link rel="stylesheet" href="./styles.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.min.js" } }
+  </script>
+</head>
+<body>
+  <header id="toolbar">
+    <span class="brand">行为树演出运行时</span>
+    <button id="btn-launch" class="primary">▶ 启动 / 重启</button>
+    <button id="btn-pause" disabled>⏸ 暂停</button>
+    <button id="btn-step" disabled>⏭ 单步</button>
+    <button id="btn-replay" disabled>🔁 重放输入</button>
+    <label>速度
+      <select id="sel-speed">
+        <option value="0.5">0.5×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+        <option value="4">4×</option>
+        <option value="8">8×</option>
+      </select>
+    </label>
+    <span class="sep"></span>
+    <button id="btn-call-cancel" disabled>叫离 A（取消）</button>
+    <button id="btn-call-suspend" disabled>叫离 A（暂挂）</button>
+    <label>抢占时刻
+      <select id="sel-preset" disabled>
+        <option value="before">递交开始前</option>
+        <option value="during" selected>传递途中</option>
+        <option value="awaiting">等待确认中</option>
+        <option value="after">确认之后</option>
+      </select>
+    </label>
+    <button id="btn-schedule" disabled>设定叫离</button>
+    <button id="btn-confirm" disabled>B 确认</button>
+    <button id="btn-late" disabled>注入迟到回执×2</button>
+    <label class="chk"><input type="checkbox" id="chk-block" disabled /> 封锁通道</label>
+    <span class="sep"></span>
+    <span id="clock" class="clock">tick 0 · 0.00s · 未启动</span>
+  </header>
+
+  <main id="layout">
+    <section id="left">
+      <div id="stage-wrap">
+        <div id="stage"></div>
+        <div id="bubbles"></div>
+        <div class="stage-legend">
+          <span><i class="dot a"></i>演员 A（递交人）</span>
+          <span><i class="dot b"></i>演员 B（接手人）</span>
+          <span><i class="dot p"></i>道具</span>
+          <span><i class="dot e"></i>侧台出口</span>
+        </div>
+      </div>
+      <div id="results" class="panel">
+        <h2>结果区 · 角色执行与校验</h2>
+        <div id="result-body"></div>
+      </div>
+    </section>
+
+    <section id="middle" class="panel">
+      <h2>行为树 · 节点实时状态</h2>
+      <div id="tree-view"></div>
+    </section>
+
+    <section id="right">
+      <div class="panel">
+        <h2>黑板（作用域 / 版本）</h2>
+        <div id="bb-view"></div>
+      </div>
+      <div class="panel grow">
+        <h2>事件日志</h2>
+        <div id="log-view"></div>
+      </div>
+    </section>
+  </main>
+
+  <section id="editor-panel" class="panel">
+    <h2>行为节点编辑（JSON）<span class="hint">修改后点击「应用并重启」生效；未知类型 / 语法错误会在此提示</span></h2>
+    <textarea id="tree-editor" spellcheck="false"></textarea>
+    <div class="editor-bar">
+      <button id="btn-apply">应用并重启</button>
+      <button id="btn-reset-tree">恢复默认树</button>
+      <span id="editor-error"></span>
+    </div>
+  </section>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
