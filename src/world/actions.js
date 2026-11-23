@@ -7,6 +7,7 @@
 import { Node, Status } from '../bt/kernel.js';
 import { OpStatus } from './world.js';
 import { MissingKeyError } from '../bt/blackboard.js';
+import { lineSignature } from '../bt/identity.js';
 
 // —— 异步操作动作基类 ——
 // 子类实现 issue(ctx)：返回 token；若无需/无法签发，返回 null 并设置 immediateResult。
@@ -127,8 +128,17 @@ export class LeafNode extends Node {
 }
 
 // —— 台词：立即动作。actor 可为 "bb:key" 从黑板严格解析 ——
+// 热换版去重：兼容动作恢复后不得重播已发台词。ctx.carriedLines 只在换版时
+// 由旧树已完成台词填充；普通抢占/重演时为空，仍按演出语义重说。
 export class SpeakLine extends LeafNode {
   tick(ctx) {
+    const sig = lineSignature(this);
+    if (sig && ctx.carriedLines && ctx.carriedLines.has(sig)) {
+      // 只抑制换版造成的那一次重进；之后有明确原因（如重试）的再入仍可重说
+      ctx.carriedLines.delete(sig);
+      ctx.log({ type: 'line-suppressed', node: this.name, key: this.key, text: this.params.text });
+      return Status.SUCCESS;
+    }
     const actorId = resolveActor(ctx, this.params.actor);
     if (actorId === null) {
       ctx.log({ type: 'action-failed', node: this.name, reason: `cannot resolve actor '${this.params.actor}'` });
@@ -143,9 +153,10 @@ export class SpeakLine extends LeafNode {
 export class SetBlackboard extends LeafNode {
   tick(ctx) {
     const p = this.params;
+    const bbKey = p.bbKey ?? p.key;
     const bb = p.scope === 'local' ? ctx.bb : ctx.bbRoot;
-    bb.set(p.key, p.value, ctx.tick);
-    ctx.log({ type: 'bb-set', node: this.name, key: p.key, value: p.value, scope: p.scope || 'root' });
+    bb.set(bbKey, p.value, ctx.tick);
+    ctx.log({ type: 'bb-set', node: this.name, key: bbKey, value: p.value, scope: p.scope || 'root' });
     return Status.SUCCESS;
   }
 }
@@ -170,12 +181,13 @@ export class Fail extends LeafNode {
 export class BlackboardEquals extends LeafNode {
   tick(ctx) {
     const p = this.params;
+    const bbKey = p.bbKey ?? p.key;
     let value;
     try {
-      value = ctx.bb.require(p.key);
+      value = ctx.bb.require(bbKey);
     } catch (e) {
       if (e instanceof MissingKeyError) {
-        ctx.log({ type: 'cond-missing-key', node: this.name, key: p.key });
+        ctx.log({ type: 'cond-missing-key', node: this.name, key: bbKey });
         return Status.FAILURE;
       }
       throw e;

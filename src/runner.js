@@ -6,6 +6,7 @@ import { buildTree } from './bt/builder.js';
 import { Status } from './bt/kernel.js';
 import { World } from './world/world.js';
 import { STAGE, initialBlackboardEntries } from './scenario.js';
+import { performHotSwap, validateCandidate } from './bt/hotswap.js';
 
 export const DT = 1 / 30;
 
@@ -24,11 +25,33 @@ export class Runner {
     this.inputs = []; // { tick, label, apply(runner) }
     this.cursor = 0;
     this.done = false;
+    this.hotSwapCount = 0;
+    this.lastHotSwap = null;
+    this.carriedLineSignatures = new Set();
     if (options.inputs) for (const i of options.inputs) this.scheduleInput(i.tick, i.label, i.apply);
   }
 
   _log(e) {
     this.events.push({ tick: this.world.tick, ...e });
+  }
+
+  // 供热换版等内部机制追加一条事件（与普通日志同一时间线）
+  logEvent(e) {
+    this._log(e);
+  }
+
+  // 构造一次求值上下文：热换版与正常 tick 共用同一份世界/黑板引用
+  makeContext() {
+    return {
+      tick: this.world.tick,
+      dt: DT,
+      time: this.world.time,
+      world: this.world,
+      bb: this.bbRoot,
+      bbRoot: this.bbRoot,
+      log: (e) => this._log(e),
+      carriedLines: this.carriedLineSignatures,
+    };
   }
 
   // 所有外部输入（按钮、定时注入）都经此进入内核，按 tick 排序应用
@@ -49,21 +72,23 @@ export class Runner {
     this.world.update(DT);
     // 3) 行为树求值
     if (this.tree.status !== Status.SUCCESS && this.tree.status !== Status.FAILURE) {
-      const ctx = {
-        tick: this.world.tick,
-        dt: DT,
-        time: this.world.time,
-        world: this.world,
-        bb: this.bbRoot,
-        bbRoot: this.bbRoot,
-        log: (e) => this._log(e),
-      };
+      const ctx = this.makeContext();
       this.tree.run(ctx);
     }
     if (this.tree.status === Status.SUCCESS || this.tree.status === Status.FAILURE) {
       this.done = true;
       this._log({ type: 'tree-done', status: this.tree.status });
     }
+  }
+
+  // —— 演出中的逻辑换版 ——
+  // 候选校验无副作用；校验失败时保留当前可运行旧树并返回原因。
+  validate(def) { return validateCandidate(def, this); }
+
+  hotSwap(def) {
+    const report = performHotSwap(this, def);
+    if (report.ok) this.treeDef = def;
+    return report;
   }
 
   run(maxTicks = 3000) {

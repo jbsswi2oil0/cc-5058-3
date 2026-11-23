@@ -4,7 +4,8 @@
   "description": "行为树运行时 + 三维舞台演出场景（无构建步骤）",
   "type": "module",
   "scripts": {
-    "test": "node test/run-tests.mjs",
+    "test": "node test/run-tests.mjs && node test/hotswap-tests.mjs",
+    "test:hotswap": "node test/hotswap-tests.mjs",
     "serve": "python3 -m http.server 8080"
   }
 }

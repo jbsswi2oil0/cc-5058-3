@@ -8,6 +8,9 @@ const LOG_CLASS = {
   'prop-restored': 'log-warn', line: 'log-line', 'bb-set': 'log-dim', retry: 'log-warn',
   'action-issue': 'log-dim', 'action-failed': 'log-err', 'cond-missing-key': 'log-err',
   'handover-idempotent': 'log-ok', 'tree-done': 'log-ok', input: 'log-enter', 'scope-enter': 'log-dim',
+  'hotswap-ok': 'log-ok', 'hotswap-reject': 'log-err', 'hotswap-adopt': 'log-enter',
+  'hotswap-continue': 'log-enter', 'hotswap-preserve': 'log-ok', 'hotswap-reset': 'log-warn',
+  'hotswap-exit': 'log-warn', 'line-suppressed': 'log-dim', 'hotswap-skip': 'log-warn',
 };
 
 function fmtVal(v) {
@@ -41,6 +44,15 @@ export function describeEvent(e) {
     case 'tree-done': return `演出结束：${e.status}`;
     case 'input': return `输入：${e.label}`;
     case 'scope-enter': return `进入作用域 ${e.scope}`;
+    case 'hotswap-ok': return `换版生效：${e.from} ⇒ ${e.to}（迁移${e.migrated} 保留${e.preserved} 重置${e.reset} 退出${e.exited}）`;
+    case 'hotswap-reject': return `换版被拒：${e.reason}`;
+    case 'hotswap-adopt': return `迁移进度 ${e.node} [${e.key}] (${e.kind})`;
+    case 'hotswap-continue': return `沿用操作 ${e.node} [${e.key}] token#${e.token}`;
+    case 'hotswap-preserve': return `保留终态 ${e.node} [${e.key}] -> ${e.status}`;
+    case 'hotswap-reset': return `重置状态 ${e.node} [${e.key}]：${e.reason}`;
+    case 'hotswap-exit': return `退出动作 ${e.node} [${e.key}]${e.token !== null ? ` 取消#${e.token}` : ''}`;
+    case 'hotswap-skip': return `跳过插入点 ${e.node} [${e.key}]：${e.reason}`;
+    case 'line-suppressed': return `台词不重播 ${e.node}（换版前已发）`;
     default: return `${e.type} ${JSON.stringify(e).slice(0, 90)}`;
   }
 }
@@ -88,9 +100,49 @@ export class BlackboardView {
   }
 }
 
-export class ResultView {
+export class SwapView {
   constructor(container) { this.container = container; }
 
+  update(runner) {
+    const report = runner && runner.lastHotSwap;
+    if (!report) {
+      this.container.innerHTML = '<span style="color:#566072">尚未换版。先启动演出，再点「⟳ 演出中换版」。</span>';
+      return;
+    }
+    const decisionClass = (d) => d;
+    const DECISION_TEXT = {
+      new: '首次进入', 'resume-progress': '迁移进度', 'continue-op': '沿用操作',
+      'resume-children': '迁移子节点', 'preserve-terminal': '保留终态',
+      'reset-reenter': '退出后重进', removed: '已删除', idle: '未启动',
+    };
+    const head = report.ok
+      ? `<div class="swap-head">tick ${report.tick} 换版生效 · 迁移映射（按稳定 key）`
+        + `${report.replayBase ? ` · 重放进点：${report.replayBase.name}` : ' · 无重放进点'}</div>`
+      : `<div class="swap-head swap-bad">tick ${report.tick} 换版被拒 · ${report.reason}</div>`;
+    const rows = report.plan.map((p) => {
+      const cls = report.ok ? decisionClass(p.decision) : 'idle';
+      return `<div class="swap-row"><span class="k">${p.key}</span>`
+        + `<span class="d ${cls}">${DECISION_TEXT[p.decision] || p.decision}</span>`
+        + `<span class="why">${p.name} · ${p.detail}</span></div>`;
+    }).join('');
+    let resetHtml = '';
+    if (report.ok && report.reset.length) {
+      resetHtml = `<div class="swap-head" style="margin-top:6px;color:#ffb86b">被重置的状态</div>`
+        + report.reset.map((r) => `<div class="swap-row"><span class="k">${r.key}</span>`
+          + `<span class="d reset-reenter">重置</span><span class="why">${r.name} · ${r.reason}</span></div>`).join('');
+    }
+    let skipHtml = '';
+    if (report.ok && report.skipped && report.skipped.length) {
+      skipHtml = `<div class="swap-head" style="margin-top:6px;color:#ffb86b">已越过、本场不追补的插入点</div>`
+        + report.skipped.map((s) => `<div class="swap-row"><span class="k">${s.key}</span>`
+          + `<span class="d reset-reenter">跳过</span><span class="why">${s.name} · ${s.reason}</span></div>`).join('');
+    }
+    this.container.innerHTML = head + rows + resetHtml + skipHtml;
+  }
+}
+
+export class ResultView {
+  constructor(container) { this.container = container; }
   update(runner) {
     if (!runner) { this.container.innerHTML = '<span style="color:#566072">尚未启动。点击「▶ 启动 / 重启」。</span>'; return; }
     const w = runner.world;

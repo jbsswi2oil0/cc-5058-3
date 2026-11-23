@@ -36,8 +36,9 @@ export class TreeView {
     name.textContent = node.name;
     const count = document.createElement('span');
     count.className = 'ncount';
+    const keyTag = node.key ? `[${node.key}] ` : '';
     row.append(badge, type, name, count);
-    row.title = `#${node.id} ${node.name}`;
+    row.title = `#${node.id} ${node.name}${node.key ? ` · key=${node.key}` : ''}`;
     wrap.appendChild(row);
     this.nodeRows.set(node, { row, badge, count });
 
@@ -53,10 +54,11 @@ export class TreeView {
   update() {
     for (const [node, els] of this.nodeRows) {
       const st = node.suspended ? 'suspended' : node.status;
-      els.row.className = `row ${st}`;
+      els.row.className = `row ${st}${node.migrated ? ' migrated' : ''}`;
       els.badge.className = `badge ${st}`;
       els.badge.textContent = st;
-      els.count.textContent = `入${node.enterCount} 出${node.exitCount}`;
+      const keyTag = node.key ? `[${node.key}] ` : '';
+      els.count.textContent = `${keyTag}入${node.enterCount} 出${node.exitCount}`;
     }
   }
 }

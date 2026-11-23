@@ -85,9 +85,23 @@
     <textarea id="tree-editor" spellcheck="false"></textarea>
     <div class="editor-bar">
       <button id="btn-apply">应用并重启</button>
+      <button id="btn-hotswap" class="primary">⟳ 演出中换版（保留运行状态）</button>
+      <label>样例
+        <select id="sel-sample">
+          <option value="v2" selected>v2：递交前插入动作</option>
+          <option value="v3">v3：删除谢幕分支</option>
+          <option value="v4">v4：递交动作语义变更</option>
+        </select>
+      </label>
+      <button id="btn-load-sample">载入样例到编辑器</button>
       <button id="btn-reset-tree">恢复默认树</button>
       <span id="editor-error"></span>
     </div>
+  </section>
+
+  <section id="swap-panel" class="panel">
+    <h2>热换版 · 迁移映射与被重置状态<span class="hint">按稳定 key + 语义契约交接；不同序号不继承状态</span></h2>
+    <div id="swap-body"><span style="color:#566072">尚未换版。点「⟳ 演出中换版」从编辑器提交新树。</span></div>
   </section>
 
   <script type="module" src="./src/main.js"></script>

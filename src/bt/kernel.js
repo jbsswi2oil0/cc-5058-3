@@ -31,6 +31,9 @@ export class Node {
     this.exitCount = 0;
     this.lastExitStatus = null; // 'success' | 'failure' | 'aborted'
     this.parent = null;
+    this.key = null;            // 稳定身份（由 builder 从 JSON key 写入）
+    this.migrated = false;      // 本节点状态是否由热换版迁移而来
+    this.adoptedProgress = null;
   }
 
   addChild(child) {
@@ -45,6 +48,8 @@ export class Node {
       this.status = Status.RUNNING;
       this.enterCount += 1;
       ctx.log({ type: 'enter', node: this.name, nodeId: this.id });
+      this.adoptedProgress = null;
+      this.migrated = false;
       this.enter(ctx);
     }
     if (this.status !== Status.RUNNING) return this.status;
@@ -97,6 +102,8 @@ export class Node {
     this.status = Status.IDLE;
     this.suspended = false;
     this.lastExitStatus = null;
+    this.migrated = false;
+    this.adoptedProgress = null;
     // 注意：enterCount/exitCount 是累计证据，不随重进清零
   }
 
@@ -115,6 +122,20 @@ export function resetTree(node) {
   for (const c of children) resetTree(c);
   if (node.body) resetTree(node.body);
   if (node.guard) resetTree(node.guard);
+}
+
+export function resetSubtree(node) {
+  resetTree(node);
+}
+
+// 热换版：把节点状态标记为「自旧树迁移而来」，不调用 enter。
+// progress 为动作节点自己报告的运行进度（等待剩余时间等）。
+export function adoptState(node, status, progress, suspended = false) {
+  node.status = status;
+  node.suspended = !!suspended;
+  node.migrated = true;
+  node.adoptedProgress = progress || null;
+  if (status === Status.RUNNING) node.enterCount += 1;
 }
 
 // 深度优先收集运行路径（供界面高亮与调试）

@@ -3,10 +3,10 @@
 // 输入被记录下来，可随时重放（同一棵树、同一批输入 -> 同样的结果）。
 
 import { Runner, DT, probe } from './runner.js';
-import { DEFAULT_TREE } from './scenario.js';
+import { DEFAULT_TREE, treeV2, treeV3RemoveBow, treeV4ChangedHandover } from './scenario.js';
 import { Stage3D } from './ui/stage3d.js';
 import { TreeView } from './ui/treeview.js';
-import { LogView, BlackboardView, ResultView } from './ui/panel.js';
+import { LogView, BlackboardView, ResultView, SwapView } from './ui/panel.js';
 import { Scope } from './bt/nodes.js';
 
 const $ = (id) => document.getElementById(id);
@@ -16,6 +16,7 @@ const treeView = new TreeView($('tree-view'));
 const logView = new LogView($('log-view'));
 const bbView = new BlackboardView($('bb-view'));
 const resultView = new ResultView($('result-body'));
+const swapView = new SwapView($('swap-body'));
 
 const editor = $('tree-editor');
 editor.value = JSON.stringify(DEFAULT_TREE, null, 2);
@@ -87,9 +88,32 @@ function launch(treeDef, { keepRecording = false } = {}) {
   $('btn-pause').textContent = '⏸ 暂停';
 }
 
+// 演出中的逻辑换版：校验 -> 迁移 -> 交接；失败保留旧树并显示原因。
+// 不重建 Runner（世界/黑板/进度/输入队列全部保留）。
+function hotSwapFromEditor() {
+  if (!runner) {
+    $('editor-error').textContent = '没有运行中的演出，先点「▶ 启动 / 重启」';
+    return;
+  }
+  const def = parseEditor();
+  if (!def) return;
+  const report = runner.hotSwap(def);
+  if (!report.ok) {
+    $('editor-error').textContent = `换版被拒（旧树继续运行）：${report.reason}`;
+    swapView.update(runner);
+    return;
+  }
+  $('editor-error').textContent = '';
+  // 树视图重建为候选树对象，节点状态/迁移标记立刻可见
+  treeView.build(runner.tree);
+  swapView.update(runner);
+  if (!paused && runner.done) { paused = false; }
+  updateButtons();
+}
+
 function updateButtons() {
   const has = !!runner;
-  for (const id of ['btn-pause', 'btn-step', 'btn-replay', 'btn-call-cancel', 'btn-call-suspend', 'btn-confirm', 'btn-late', 'chk-block', 'sel-preset', 'btn-schedule']) {
+  for (const id of ['btn-pause', 'btn-step', 'btn-replay', 'btn-call-cancel', 'btn-call-suspend', 'btn-confirm', 'btn-late', 'chk-block', 'sel-preset', 'btn-schedule', 'btn-hotswap', 'btn-load-sample']) {
     $(id).disabled = !has;
   }
 }
@@ -107,6 +131,13 @@ $('btn-apply').onclick = () => {
 $('btn-reset-tree').onclick = () => {
   editor.value = JSON.stringify(DEFAULT_TREE, null, 2);
   $('editor-error').textContent = '';
+};
+$('btn-hotswap').onclick = hotSwapFromEditor;
+$('btn-load-sample').onclick = () => {
+  const which = $('sel-sample').value;
+  const sample = which === 'v3' ? treeV3RemoveBow() : which === 'v4' ? treeV4ChangedHandover() : treeV2();
+  editor.value = JSON.stringify(sample, null, 2);
+  $('editor-error').textContent = `已载入样例 ${which}：点「⟳ 演出中换版」提交，或「应用并重启」冷启动对比`;
 };
 $('btn-pause').onclick = () => {
   paused = !paused;
@@ -220,9 +251,11 @@ function frame(now) {
     logView.update(runner.events);
     bbView.update(runner.bbRoot, collectScopes(runner.tree));
     resultView.update(runner);
+    swapView.update(runner);
     updateBubbles();
     const t = runner.world;
-    $('clock').textContent = `tick ${t.tick} · ${t.time.toFixed(2)}s · ${runner.done ? `结束(${runner.tree.status})` : paused ? '已暂停' : '运行中'}`;
+    const swapNote = runner.hotSwapCount ? ` · 换版×${runner.hotSwapCount}` : '';
+    $('clock').textContent = `tick ${t.tick} · ${t.time.toFixed(2)}s · ${runner.done ? `结束(${runner.tree.status})` : paused ? '已暂停' : '运行中'}${swapNote}`;
   } else {
     resultView.update(null);
   }
